@@ -212,7 +212,7 @@ def evaluate_AP_negative():
             print('step {} / {}'.format(step, len(wd_data_loader)))
 
     AP = []
-    for i in range(50):
+    for i in range(args.AP_iters):
         pixel_counter = (gt_wd==0).sum()
         gt = gt_wd.clone()
         conf = conf_wd.clone()
@@ -241,13 +241,13 @@ def evaluate_AP_negative():
         AP.append(average_precision)
 
     AP = np.array(AP)
-    print('negative images average precition: {} +/- {}'.format(AP.mean(),AP.std()))
+    print('negative images average precision: {} +/- {}'.format(AP.mean(),AP.std()))
 
 def evaluate_AP_patches():
     log_interval = 20
     AP = []
 
-    for i in range(50):
+    for i in range(args.AP_iters):
         gt = torch.ByteTensor([])
         conf = torch.FloatTensor([])
         for step, batch in enumerate(pascal_wd_data_loader):
@@ -269,7 +269,7 @@ def evaluate_AP_patches():
         AP.append(average_precision)
 
     AP = np.array(AP)
-    print('negative images average precition: {} +/- {}'.format(AP.mean(),AP.std()))
+    print('negative images average precision: {} +/- {}'.format(AP.mean(),AP.std()))
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -278,6 +278,7 @@ def get_args():
     parser.add_argument('--save-outputs', type=int, default=0)
     parser.add_argument('--reshape-size', type=int, default=1)
     parser.add_argument('--verbose', type=int, default=1)
+    parser.add_argument('--AP-iters', type=int, default=50)
     parser.add_argument('--save-name', type=str, default='')
     return parser.parse_args()
 
