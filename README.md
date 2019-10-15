@@ -22,6 +22,7 @@ cd data
 
 Create a <a href=http://www.wilddash.cc/accounts/login>Wilddash account</a> and download:
 * wd_val_01.zip
+
 Either download and extract to `data/` or create a symbolic link `data/wd_val_01`
 
 ### Run inference
