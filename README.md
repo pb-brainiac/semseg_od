@@ -33,6 +33,6 @@ cd libs
 
 ### Run inference
 ```
-python inference.py --model models/base.py --params params/base_oe.pt --save-outputs=0 --reshape-size=540 --verbose=1 --iters 5
-python inference.py --model models/two_head.py --params params/two_head.pt --save-outputs=1 --save-name="two_head" --reshape-size=540 --verbose=0
+python inference.py --model models/base.py --params params/base_oe.pt --save-outputs=0 --reshape-size=540 --verbose=1 --AP-iters 5
+python inference.py --model models/two_head.py --params params/two_head.pt --save-outputs=1 --save-name="two_head" --reshape-size=540 --verbose=0 --AP-iters 5
 ```
