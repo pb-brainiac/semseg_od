@@ -25,6 +25,12 @@ Create a <a href=http://www.wilddash.cc/accounts/login>Wilddash account</a> and 
 
 Either download and extract to `data/` or create a symbolic link `data/wd_val_01`
 
+### Prepare libs:
+```bash
+cd libs
+./build.sh
+```
+
 ### Run inference
 ```
 python inference.py --model models/base.py --params params/base_oe.pt --save-outputs=0 --reshape-size=540 --verbose=1 --iters 5
