@@ -11,7 +11,6 @@ from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import PIL.Image as pimg
-import libs.cylib as cylib
 import matplotlib.pyplot as plt
 import importlib.util
 import readers.wilddash_reader as wd_reader
@@ -40,6 +39,12 @@ def import_module(name, path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+def get_img_conf_mat(pred, true, size):
+    eye_matrix = torch.eye(size[0]).cuda()
+    pred_OH = eye_matrix[pred].to(torch.float64)
+    true_OH = eye_matrix[true].to(torch.float64)
+    return torch.einsum("ni,nj->ij", true_OH, pred_OH).to(torch.int64)
 
 def compute_errors(conf_mat, name, class_infoi, verbose=False):
     num_correct = conf_mat.trace()
@@ -142,28 +147,23 @@ def segment_image(model, batch, args, conf_mats):
     name = batch['name'][0]
     img = torch.autograd.Variable(batch['image'].cuda(
             non_blocking=True), requires_grad=True)
+
     with torch.no_grad():
         probs, conf_probs = model(img, batch['image'].shape[2:])
+        pred = probs.max(dim=1)[1][0]
+        pred_w_outlier = pred.clone()
+        pred_w_outlier[conf_probs[0] < 0.5] = ood_id
 
-    pred = probs.max(dim=1)[1]
+        true = None
+        if batch['labels'] is not None:
+            labels = batch['labels'][0].cuda()
+            conf_mats['seg'] += get_img_conf_mat(pred[labels<num_classes], labels[labels<num_classes], conf_mats['seg'].shape)
+            conf_mats['seg_w_outlier'] += get_img_conf_mat(pred_w_outlier[labels<num_classes], labels[labels<num_classes], conf_mats['seg_w_outlier'].shape)
 
-    pred_w_outlier = pred.clone()
-    pred_w_outlier[conf_probs < 0.5] = ood_id
-
-    pred = pred.detach().cpu().numpy().astype(np.int32)[0]
-    pred_w_outlier = pred_w_outlier.detach().cpu().numpy().astype(np.int32)[0]
-    conf_probs = conf_probs.detach().cpu().numpy()
-
-    true = None
-    if batch['labels'] is not None:
-        labels = batch['labels'][0]
-        true = labels.numpy().astype(np.int32)
-
-        cylib.collect_confusion_matrix(
-                pred[true<num_classes], true[true<num_classes], conf_mats['seg'])
-        cylib.collect_confusion_matrix(
-                pred_w_outlier[true<num_classes], true[true<num_classes], conf_mats['seg_w_outlier'])
     if args.save_outputs:
+        pred = pred.detach().cpu().numpy().astype(np.int32)
+        pred_w_outlier = pred_w_outlier.detach().cpu().numpy().astype(np.int32)
+        conf_probs = conf_probs.detach().cpu().numpy()
         img_raw = wd_dataset.denormalize(batch['image'][0],
                                       batch['mean'][0].numpy(), batch['std'][0].numpy())
         store_images(img_raw, pred, true, class_info, 'segmentation/'+name)
@@ -172,8 +172,8 @@ def segment_image(model, batch, args, conf_mats):
 
 def evaluate_segmentation():
     conf_mats = {}
-    conf_mats['seg'] = np.zeros((num_classes, num_classes), dtype=np.uint64)
-    conf_mats['seg_w_outlier'] = np.zeros((num_classes+1, num_classes+1), dtype=np.uint64)
+    conf_mats['seg'] = torch.zeros((num_classes, num_classes), dtype=torch.int64).cuda()
+    conf_mats['seg_w_outlier'] = torch.zeros((num_classes+1, num_classes+1), dtype=torch.int64).cuda()
 
     log_interval = max(len(wd_data_loader) // 5, 1)
     for step, batch in enumerate(wd_data_loader):
@@ -188,8 +188,10 @@ def evaluate_segmentation():
             print('step {} / {}'.format(step, len(wd_data_loader)))
 
     print('\nSegmentation:')
+    conf_mats['seg'] = conf_mats['seg'].cpu().numpy()
     compute_errors(conf_mats['seg'], 'Validation', class_info)
     print('\nSegmentation with confidence:')
+    conf_mats['seg_w_outlier'] = conf_mats['seg_w_outlier'].cpu().numpy()
     compute_errors(conf_mats['seg_w_outlier'], 'Validation', class_info)
 
 def evaluate_AP_negative():
