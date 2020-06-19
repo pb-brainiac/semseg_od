@@ -282,6 +282,7 @@ def get_args():
     parser.add_argument('--verbose', type=int, default=1)
     parser.add_argument('--AP-iters', type=int, default=50)
     parser.add_argument('--save-name', type=str, default='')
+    parser.add_argument('--data_path', type=str, default='./data/')
     return parser.parse_args()
 
 def prepare_for_saving():

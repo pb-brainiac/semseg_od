@@ -25,7 +25,7 @@ class DatasetReader(Dataset):
         self.mean = [123.68, 116.779, 103.939]
         self.std = [70.59564226, 68.52497082, 71.41913876]
 
-        pascal_dir = './data/VOCdevkit/VOC2007/'
+        pascal_dir = args.data_path + '/VOCdevkit/VOC2007/'
         data_dir = join(pascal_dir, 'SegmentationObject')
         files = next(os.walk(data_dir))[2]
         animals = {'bird': 3, 'cat': 8, 'cow': 10, 'dog': 12, 'horse': 13, 'sheep': 17}
