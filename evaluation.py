@@ -53,7 +53,6 @@ def compute_errors(conf_mat, name, class_info, verbose=False, nc=None):
 
 def segment_image(model, batch, args, conf_mats, ood_id=-1, nc=None):
     num_classes = nc if nc is not None else model.num_classes
-    name = batch['name'][0]
     img = torch.autograd.Variable(batch['image'].cuda(
             non_blocking=True), requires_grad=True)
 
@@ -63,7 +62,6 @@ def segment_image(model, batch, args, conf_mats, ood_id=-1, nc=None):
         pred_w_outlier = pred.clone()
         pred_w_outlier[conf_probs[0] < 0.5] = ood_id
 
-        true = None
         if batch['labels'] is not None:
             labels = batch['labels'][0].cuda()
             conf_mats['seg'] += get_img_conf_mat(pred[labels<num_classes], labels[labels<num_classes], conf_mats['seg'].shape)

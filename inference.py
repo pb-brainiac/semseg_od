@@ -13,6 +13,7 @@ import numpy as np
 import PIL.Image as pimg
 import matplotlib.pyplot as plt
 import importlib.util
+import readers.transform as transform
 import readers.cityscapes_reader as city_reader
 import readers.wilddash_reader as wd_reader
 import readers.lsun_reader as lsun_reader
@@ -102,8 +103,10 @@ def store_outputs(batch, pred, pred_w_outlier, conf_probs):
     pred = pred.detach().cpu().numpy().astype(np.int32)
     pred_w_outlier = pred_w_outlier.detach().cpu().numpy().astype(np.int32)
     conf_probs = conf_probs.detach().cpu().numpy()
-    img_raw = wd_dataset.denormalize(batch['image'][0],
-                                  batch['mean'][0].numpy(), batch['std'][0].numpy())
+    img_raw = transform.denormalize(batch['image'][0],
+                                    batch['mean'][0].numpy(), batch['std'][0].numpy())
+    true = batch['labels'][0].numpy().astype(np.int32)
+    name = batch['name'][0]
     store_images(img_raw, pred, true, class_info, 'segmentation/'+name)
     store_images(img_raw, pred_w_outlier, true, class_info, 'seg_with_conf/'+ name)
     store_conf(img_raw, conf_probs, name, 'probs')
@@ -258,15 +261,18 @@ model.load_state_dict(state_dict)
 model.cuda()
 model = model.eval()
 
-class_info = wd_reader.DatasetReader.class_info
-ignore_id = wd_reader.DatasetReader.ignore_id
-ood_id = wd_reader.DatasetReader.ood_id
-num_classes = wd_reader.DatasetReader.num_classes
 
 
-wd_dataset = wd_reader.DatasetReader(args)#, subset='val')
+#wd_dataset = wd_reader.DatasetReader(args)
+wd_dataset = city_reader.DatasetReader(args, subset='val')
 wd_data_loader = DataLoader(wd_dataset, batch_size=1,
                          num_workers=8, pin_memory=True, shuffle=False)
+
+class_info = wd_dataset.class_info
+ignore_id = wd_dataset.ignore_id
+ood_id = wd_dataset.ood_id
+num_classes = wd_dataset.num_classes
+
 #lsun_dataset = lsun_reader.DatasetReader(args)
 #lsun_data_loader = DataLoader(lsun_dataset, batch_size=1,
 #                         num_workers=1, pin_memory=True, shuffle=True)
