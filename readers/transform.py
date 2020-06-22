@@ -17,6 +17,35 @@ def resize_labels(img, size):
     img = img.resize(size, pimg.NEAREST)
   return img
 
+def random_crop(images, crop_size, snap_margin_prob=0.1):
+  if isinstance(crop_size, int):
+    crop_h = crop_size
+    crop_w = crop_size
+  else:
+    crop_h, crop_w = crop_size
+
+  height = images[0].size[1]
+  width = images[0].size[0]
+  sx, crop_w = _sample_location(width, crop_w, snap_margin_prob)
+  sy, crop_h = _sample_location(height, crop_h, snap_margin_prob)
+
+  cropped = []
+  for img in images:
+    cropped.append(img.crop((sx, sy, sx+crop_w, sy+crop_h)))
+  return cropped
+
+def _sample_location(dim_size, crop_size, snap_margin_prob):
+  if dim_size > crop_size:
+    max_start = dim_size - crop_size
+    snap_margin = int(snap_margin_prob/2 * max_start)
+    start_pos = np.random.randint(-snap_margin, max_start+1+snap_margin)
+    start_pos = max(start_pos, 0)
+    start_pos = min(start_pos, max_start)
+    size = crop_size
+  else:
+    start_pos = 0
+    size = dim_size
+  return start_pos, size
 
 def numpy_to_torch_image(img):
   img = torch.FloatTensor(img)

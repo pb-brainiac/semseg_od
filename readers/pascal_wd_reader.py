@@ -116,6 +116,3 @@ class DatasetReader(Dataset):
         batch['image'] = img_wd
         batch['labels'] = torch.ByteTensor(labels)
         return batch
-
-    def denormalize(self, img, mean, std):
-        return transform.denormalize(img, mean, std)

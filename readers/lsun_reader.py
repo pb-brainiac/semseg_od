@@ -59,6 +59,3 @@ class DatasetReader(Dataset):
         batch['target_size'] = img.shape[:2]
 
         return batch
-
-    def denormalize(self, img, mean, std):
-        return transform.denormalize(img, mean, std)

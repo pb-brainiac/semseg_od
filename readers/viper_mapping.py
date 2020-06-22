@@ -87,3 +87,10 @@ def get_train_ids():
     if i.eval:
       train_ids.append(i.id)
   return train_ids
+
+def get_class_info():
+  class_info = []
+  for i in labels:
+    if i.eval:
+      class_info.append([i.color[0], i.color[1], i.color[2], i.name])
+  return class_info
