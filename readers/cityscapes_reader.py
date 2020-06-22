@@ -44,7 +44,7 @@ class DatasetReader(Dataset):
     for i, city_id in enumerate(city_mapping.get_train_ids()):
         mapping[city_id] = i
 
-    def __init__(self, args):
+    def __init__(self, args, subset='train'):
         self.args = args
         self.last_block_pooling = args.last_block_pooling
         self.reshape_size = args.reshape_size
@@ -52,13 +52,23 @@ class DatasetReader(Dataset):
         self.mean = [123.68, 116.779, 103.939]
         self.std = [70.59564226, 68.52497082, 71.41913876]
 
-        data_dir = args.data_path + '/wd_val_01/'
-        files = next(os.walk(data_dir))[2]
-        self.img_paths = [join(data_dir, f) for f in files if '_100000.png' in f]
-        self.label_paths = {f: f[:-4] + '_labelIds.png' for f in self.img_paths
-                            if os.path.exists(f[:-4] + '_labelIds.png')}
-        self.names = [f[:-4] for f in files if '_100000.png' in f]
+        data_dir = join(args.data_path, 'cityscapes', 'leftImg8bit', subset)
 
+        print(data_dir)
+        cities = next(os.walk(data_dir))[1]
+
+        self.img_paths = []
+        self.label_paths = {}
+        self.names = []
+
+        for city in cities:
+            files_path = join(data_dir, city)
+            files = next(os.walk(files_path))[2]
+            self.img_paths.extend([join(files_path, f) for f in files])
+            self.names.extend([f[:-4] for f in files])
+
+        self.label_paths.update({f: f.replace('_leftImg8bit','_gtFine_labelIds').replace('leftImg8bit','gtFine') for f in self.img_paths
+                                    if os.path.exists(f.replace('_leftImg8bit','_gtFine_labelIds').replace('leftImg8bit','gtFine'))})
         print('\nTotal num images =', len(self.img_paths))
 
     def __len__(self):

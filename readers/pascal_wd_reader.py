@@ -9,7 +9,6 @@ import PIL.Image as pimg
 import numpy as np
 
 import readers.transform as transform
-import readers.mapping as city_mapping
 import xml.etree.ElementTree as ET
 import pdb
 import random
