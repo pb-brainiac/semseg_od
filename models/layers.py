@@ -4,11 +4,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import torch.utils.checkpoint as cp
 
 batchnorm_momentum = 0.01
 
 class _DenseLayer(nn.Sequential):
-  def __init__(self, num_input_features, growth_rate, bn_size, dilation, efficient=False):
+  @staticmethod
+  def _checkpoint_function_factory(bn, relu, conv, bn2, relu2, conv2):
+    def func(*inputs):
+      inputs = torch.cat(inputs, 1)
+      return conv2(relu2(bn2(conv(relu(bn(inputs))))))
+    return func
+
+  def __init__(self, num_input_features, growth_rate, bn_size, dilation, checkpointing=True):
     super(_DenseLayer, self).__init__()
     self.add_module('norm1', nn.BatchNorm2d(num_input_features, momentum=batchnorm_momentum))
     self.add_module('relu1', nn.ReLU(inplace=True))
@@ -21,18 +29,26 @@ class _DenseLayer(nn.Sequential):
                                        kernel_size=3, stride=1, padding=1*dilation,
                                        bias=False, dilation=dilation))
 
-  def forward(self, *inputs):
-    inputs = torch.cat(inputs, 1)
-    return super(_DenseLayer, self).forward(inputs)
+    self.checkpointing = checkpointing
+    if checkpointing:
+      self.func = _DenseLayer._checkpoint_function_factory(self.norm1, self.relu1, self.conv1, self.norm2, self.relu2, self.conv2)
+
+  def forward(self, *x):
+    if self.checkpointing and self.training:
+      out = cp.checkpoint(self.func, x)
+    else:
+      x = torch.cat(x, 1)
+      out = super(_DenseLayer, self).forward(x)
+    return out
 
 
 class _DenseBlock(nn.Sequential):
   def __init__(self, num_layers, num_input_features, bn_size, growth_rate,
-               dilation=1, efficient=True):
+               dilation=1, checkpointing=True):
     super(_DenseBlock, self).__init__()
     for i in range(num_layers):
       layer = _DenseLayer(num_input_features + i * growth_rate, growth_rate,
-                          bn_size, dilation, efficient=efficient)
+                          bn_size, dilation, checkpointing=checkpointing)
       self.add_module('denselayer%d' % (i + 1), layer)
 
   def forward(self, x):
@@ -43,7 +59,13 @@ class _DenseBlock(nn.Sequential):
 
 
 class _Transition(nn.Sequential):
-  def __init__(self, num_input_features, num_output_features):
+  @staticmethod
+  def _checkpoint_function_factory(bn, relu, conv, pool):
+    def func(inputs):
+      return pool(conv(relu(bn(inputs))))
+    return func
+
+  def __init__(self, num_input_features, num_output_features, checkpointing=True):
     super(_Transition, self).__init__()
     self.add_module('norm', nn.BatchNorm2d(num_input_features, momentum=batchnorm_momentum))
     self.add_module('relu', nn.ReLU(inplace=True))
@@ -52,10 +74,27 @@ class _Transition(nn.Sequential):
     self.add_module('pool', nn.AvgPool2d(kernel_size=3, stride=2,
                       padding=1, ceil_mode=False, count_include_pad=False))
 
+    self.checkpointing = checkpointing
+    if checkpointing:
+      self.func = _Transition._checkpoint_function_factory(self.norm, self.relu, self.conv, self.pool)
+
+  def forward(self, x):
+    if self.checkpointing and self.training:
+      out = cp.checkpoint(self.func, x)
+    else:
+      out = super(_Transition, self).forward(x)
+    return out
+
 
 class _BNReluConv(nn.Sequential):
+  @staticmethod
+  def _checkpoint_function_factory(bn, relu, conv):
+    def func(inputs):
+      return conv(relu(bn(inputs)))
+    return func
+
   def __init__(self, num_maps_in, num_maps_out, k=3, batch_norm=True,
-               bias=False, dilation=1):
+               bias=False, dilation=1, checkpointing=True):
     super(_BNReluConv, self).__init__()
     if batch_norm:
       self.add_module('norm', nn.BatchNorm2d(num_maps_in, momentum=batchnorm_momentum))
@@ -63,6 +102,17 @@ class _BNReluConv(nn.Sequential):
     padding = k // 2
     self.add_module('conv', nn.Conv2d(num_maps_in, num_maps_out,
                     kernel_size=k, padding=padding, bias=bias, dilation=dilation))
+
+    self.checkpointing = checkpointing
+    if checkpointing:
+      self.func = _BNReluConv._checkpoint_function_factory(self.norm, self.relu, self.conv)
+
+  def forward (self, x):
+    if self.checkpointing and self.training:
+      out = cp.checkpoint(self.func, x)
+    else:
+      out = super(_BNReluConv, self).forward(x)
+    return out
 
 
 class SpatialPyramidPooling(nn.Module):
