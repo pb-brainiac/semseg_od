@@ -17,7 +17,7 @@ def resize_labels(img, size):
     img = img.resize(size, pimg.NEAREST)
   return img
 
-def random_crop(images, crop_size, snap_margin_prob=0.1):
+def random_crop(images, crop_size):
   if isinstance(crop_size, int):
     crop_h = crop_size
     crop_w = crop_size
@@ -26,21 +26,18 @@ def random_crop(images, crop_size, snap_margin_prob=0.1):
 
   height = images[0].size[1]
   width = images[0].size[0]
-  sx, crop_w = _sample_location(width, crop_w, snap_margin_prob)
-  sy, crop_h = _sample_location(height, crop_h, snap_margin_prob)
+  sx, crop_w = _sample_location(width, crop_w)
+  sy, crop_h = _sample_location(height, crop_h)
 
   cropped = []
   for img in images:
     cropped.append(img.crop((sx, sy, sx+crop_w, sy+crop_h)))
   return cropped
 
-def _sample_location(dim_size, crop_size, snap_margin_prob):
+def _sample_location(dim_size, crop_size):
   if dim_size > crop_size:
     max_start = dim_size - crop_size
-    snap_margin = int(snap_margin_prob/2 * max_start)
-    start_pos = np.random.randint(-snap_margin, max_start+1+snap_margin)
-    start_pos = max(start_pos, 0)
-    start_pos = min(start_pos, max_start)
+    start_pos = np.random.randint(0, max_start)
     size = crop_size
   else:
     start_pos = 0
@@ -76,3 +73,38 @@ def pad_size_for_pooling(size, last_block_pooling):
     if mod > 0:
       new_size[i] += last_block_pooling - mod
   return tuple(new_size)
+
+def random_flip(images):
+  if np.random.choice(2):
+    flipped = []
+    for img in images:
+      img = img.transpose(pimg.FLIP_LEFT_RIGHT)
+      flipped.append(img)
+    return flipped
+  else:
+    return images
+
+def pad(img, size, value):
+  if isinstance(size, int):
+    target_size = (size, size)
+  else:
+    target_size = size
+  height = img.shape[0]
+  width = img.shape[1]
+
+  if img.shape[:2] == target_size:
+    return img
+  else:
+    new_shape = list(img.shape)
+    new_shape[0] = target_size[0]
+    new_shape[1] = target_size[1]
+    padded_img = np.ndarray(new_shape, dtype=img.dtype)
+    padded_img.fill(value)
+    sh = round((target_size[0] - height) / 2)
+    eh = sh + height
+    sw = round((target_size[1] - width) / 2)
+    ew = sw + width
+    padded_img[sh:eh,sw:ew,...] = img
+    return padded_img
+
+

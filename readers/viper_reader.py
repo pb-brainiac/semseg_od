@@ -20,8 +20,8 @@ class DatasetReader(SegmentationReader):
     for i, city_id in enumerate(viper_mapping.get_train_ids()):
         mapping[city_id] = i
 
-    def __init__(self, args, subset='train'):
-        SegmentationReader.__init__(self, args)
+    def __init__(self, args, subset='train', train=False):
+        SegmentationReader.__init__(self, args, train)
         data_dir = join(args.data_path, 'viper', subset, 'img')
 
         print(data_dir)

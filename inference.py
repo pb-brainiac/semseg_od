@@ -12,7 +12,6 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import PIL.Image as pimg
 import matplotlib.pyplot as plt
-import importlib.util
 import readers.transform as transform
 import readers.cityscapes_reader as city_reader
 import readers.wilddash_reader as wd_reader
@@ -22,28 +21,9 @@ import readers.viper_reader as viper_reader
 import sklearn.metrics as sm
 import evaluation
 import pdb
+import utils
 
 
-
-class Logger(object):
-
-    def __init__(self, *files):
-        self.files = files
-
-    def write(self, obj):
-        for f in self.files:
-            f.write(obj)
-            f.flush() # If you want the output to be visible immediately
-
-    def flush(self):
-        for f in self.files:
-            f.flush()
-
-def import_module(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 def colorize_labels(y, class_colors):
     width = y.shape[1]
@@ -120,6 +100,7 @@ def evaluate_segmentation():
     for step, batch in enumerate(wd_data_loader):
         try:
             pred, pred_w_outlier, conf_probs = evaluation.segment_image(model, batch, args, conf_mats, ood_id, num_classes)
+            print(pred.shape)
             if args.save_outputs:
                 store_outputs(batch, pred, pred_w_outlier, conf_probs)
 
@@ -133,7 +114,7 @@ def evaluate_segmentation():
 
     print('\nSegmentation:')
     conf_mats['seg'] = conf_mats['seg'].cpu().numpy()
-    evaluation.compute_errors(conf_mats['seg'], 'Validation', class_info, nc=num_classes)
+    evaluation.compute_errors(conf_mats['seg'], 'Validation', class_info, nc=num_classes, verbose=True)
     print('\nSegmentation with confidence:')
     conf_mats['seg_w_outlier'] = conf_mats['seg_w_outlier'].cpu().numpy()
     evaluation.compute_errors(conf_mats['seg_w_outlier'], 'Validation', class_info, nc=num_classes)
@@ -243,7 +224,7 @@ def prepare_for_saving():
         os.makedirs(join(save_dir, class_name), exist_ok=True)
 
     log_file = open(join(save_dir, 'log.txt'), 'w')
-    sys.stdout = Logger(sys.stdout, log_file)
+    sys.stdout = utils.Logger(sys.stdout, log_file)
 
 
 args = get_args()
@@ -252,12 +233,12 @@ if args.save_outputs:
     prepare_for_saving()
 
 
-net_model = import_module('net_model', args.model)
+net_model = utils.import_module('net_model', args.model)
 
 model = net_model.build(args=args)
 state_dict = torch.load(args.params,
                         map_location=lambda storage, loc: storage)
-model.load_state_dict(state_dict)
+model.load_state_dict(state_dict, convert=True) 
 model.cuda()
 model = model.eval()
 

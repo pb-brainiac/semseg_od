@@ -20,8 +20,8 @@ class DatasetReader(SegmentationReader):
     for i, city_id in enumerate(city_mapping.get_train_ids()):
         mapping[city_id] = i
 
-    def __init__(self, args):
-        SegmentationReader.__init__(self, args)
+    def __init__(self, args, train=False):
+        SegmentationReader.__init__(self, args, train)
 
         data_dir = args.data_path + '/wd_val_01/'
         files = next(os.walk(data_dir))[2]

@@ -20,8 +20,8 @@ class DatasetReader(SegmentationReader):
     for i, city_id in enumerate(city_mapping.get_train_ids()):
         mapping[city_id] = i
 
-    def __init__(self, args, subset='train'):
-        SegmentationReader.__init__(self, args)
+    def __init__(self, args, subset='train', train=False):
+        SegmentationReader.__init__(self, args, train)
         data_dir = join(args.data_path, 'cityscapes', 'leftImg8bit', subset)
 
         print(data_dir)
@@ -39,6 +39,12 @@ class DatasetReader(SegmentationReader):
 
         self.label_paths.update({f: f.replace('_leftImg8bit','_gtFine_labelIds').replace('leftImg8bit','gtFine') for f in self.img_paths
                                     if os.path.exists(f.replace('_leftImg8bit','_gtFine_labelIds').replace('leftImg8bit','gtFine'))})
+
+        #include_classes = ['wall', 'fence', 'rider',
+        #                   'truck', 'bus', 'train', 'motorcycle']
+        if train:
+            include_classes = ['train']
+            self._oversample(include_classes)
         print('\nTotal num images =', len(self.img_paths))
 
 

@@ -35,7 +35,7 @@ class _DenseLayer(nn.Sequential):
 
   def forward(self, *x):
     if self.checkpointing and self.training:
-      out = cp.checkpoint(self.func, x)
+      out = cp.checkpoint(self.func, *x)
     else:
       x = torch.cat(x, 1)
       out = super(_DenseLayer, self).forward(x)
@@ -173,18 +173,17 @@ class _Upsample(nn.Module):
     super(_Upsample, self).__init__()
     print('Upsample layer: in =', num_maps_in, ', skip =', skip_maps_in,
           ' out =', num_maps_out)
+    self.num_maps_in = num_maps_in
     self.bottleneck = _BNReluConv(skip_maps_in, num_maps_in, k=1)
     self.blend_conv = _BNReluConv(num_maps_in, num_maps_out, k=3)
-    self.logits_aux = _BNReluConv(num_maps_in, num_classes, k=1, bias=True)
 
   def forward(self, x, skip):
-    skip = self.bottleneck(skip)
-    skip_size = skip.size()[2:4]
-    aux = self.logits_aux(x)
+    skip_b = self.bottleneck(skip)
+    skip_size = skip_b.size()[2:4]
     x = F.interpolate(x, skip_size, mode='bilinear', align_corners=False)
-    x = x + skip
+    x = x + skip_b
     x = self.blend_conv(x)
-    return x, aux
+    return x
 
 
 class DenseNet(nn.Module):
@@ -276,7 +275,9 @@ class Ladder(nn.Module):
 
     x = self.spp(x)
 
+    aux = []
     for i, skip in enumerate(reversed(skip_layers)):
-      x, _ = self.upsample_layers[i].forward(x, skip)
+      aux.append(x)
+      x = self.upsample_layers[i].forward(x, skip)
 
-    return x
+    return x, aux
