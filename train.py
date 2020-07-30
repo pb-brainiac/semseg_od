@@ -14,6 +14,7 @@ import evaluation
 import readers.transform as transform
 import matplotlib.pyplot as plt
 import numpy as np
+import readers.cityscapes_reader as city_reader
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -89,12 +90,12 @@ model = model.cuda()
 summary(model,(3, 512,512))
 
 train_dataset = reader.DatasetReader(args, 'train', train=True)
-val_dataset = reader.DatasetReader(args, 'val')
-train_eval_dataset = reader.DatasetReader(args, 'train')
+val_dataset = city_reader.DatasetReader(args, 'val')
+#train_eval_dataset = reader.DatasetReader(args, 'train')
 
 train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
 val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
-train_eval_loader = DataLoader(train_eval_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
+#train_eval_loader = DataLoader(train_eval_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
 
 fine_tune = []
 fine_tune.extend(model.feature_extractor.backbone.features.parameters())
@@ -126,10 +127,12 @@ for epoch in range(0, args.num_epochs):
     log_interval = max(len(train_loader) // 10, 1)
     for step, batch in enumerate(train_loader):
         #for img_ind in range(batch['image'].shape[0]):
-        #    plt.subplot(1,2,1)
+        #    plt.subplot(1,3,1)
         #    plt.imshow(transform.denormalize(batch['image'][img_ind], (batch['mean'][0][0], batch['mean'][1][0], batch['mean'][2][0]), (batch['std'][0][0], batch['std'][1][0], batch['std'][2][0])))
-        #    plt.subplot(1,2,2)
+        #    plt.subplot(1,3,2)
         #    plt.imshow(batch['labels'][img_ind,:,:].numpy())
+        #    plt.subplot(1,3,3)
+        #    plt.imshow(batch['labels_ood'][img_ind,:,:].numpy())
         #    plt.show()
         #pdb.set_trace()
         optimizer.zero_grad()
@@ -146,8 +149,8 @@ for epoch in range(0, args.num_epochs):
         model = model.eval()
         evaluate_segmentation(model, val_loader)
 
-with torch.no_grad():
-    model = model.eval()
-    evaluate_segmentation(model, train_eval_loader)
+#with torch.no_grad():
+#    model = model.eval()
+#    evaluate_segmentation(model, train_eval_loader)
 
 

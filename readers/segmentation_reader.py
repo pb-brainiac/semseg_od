@@ -39,11 +39,12 @@ class SegmentationReader(Dataset):
         else:
             scale = 1
 
-        img_size = (int(img_width*scale), int(img_height*scale))
         if self.train:
-            scale = np.random.uniform(
+            jitter_scale = np.random.uniform(
                 self.min_jitter_scale, self.max_jitter_scale)
-            img_size = (round(scale * img_size[0]), round(scale * img_size[1]))
+            scale *= jitter_scale
+
+        img_size = (int(img_width*scale), int(img_height*scale))
 
         img_size = transform.pad_size_for_pooling(
             img_size, self.last_block_pooling)
