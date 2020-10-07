@@ -14,7 +14,7 @@ import PIL.Image as pimg
 import matplotlib.pyplot as plt
 import readers.transform as transform
 import readers.cityscapes_reader as city_reader
-import readers.wilddash_reader as wd_reader
+import readers.wilddash_1_reader as wd_reader
 import readers.lsun_reader as lsun_reader
 import readers.pascal_wd_reader as pascal_wd_reader
 import readers.viper_reader as viper_reader
@@ -22,7 +22,7 @@ import sklearn.metrics as sm
 import evaluation
 import pdb
 import utils
-
+import random
 
 
 def colorize_labels(y, class_colors):
@@ -226,6 +226,8 @@ def prepare_for_saving():
     log_file = open(join(save_dir, 'log.txt'), 'w')
     sys.stdout = utils.Logger(sys.stdout, log_file)
 
+torch.manual_seed(0)
+random.seed(0)
 
 args = get_args()
 
@@ -244,8 +246,8 @@ model = model.eval()
 
 
 
-#wd_dataset = wd_reader.DatasetReader(args)
-wd_dataset = city_reader.DatasetReader(args, subset='val')
+wd_dataset = wd_reader.DatasetReader(args)
+#wd_dataset = city_reader.DatasetReader(args, subset='val')
 wd_data_loader = DataLoader(wd_dataset, batch_size=1,
                          num_workers=8, pin_memory=True, shuffle=False)
 
@@ -257,12 +259,12 @@ num_classes = wd_dataset.num_classes
 #lsun_dataset = lsun_reader.DatasetReader(args)
 #lsun_data_loader = DataLoader(lsun_dataset, batch_size=1,
 #                         num_workers=1, pin_memory=True, shuffle=True)
-#pascal_wd_dataset = pascal_wd_reader.DatasetReader(args)
-#pascal_wd_data_loader = DataLoader(pascal_wd_dataset, batch_size=1,
-#                         num_workers=0, pin_memory=True, shuffle=True)
+pascal_wd_dataset = pascal_wd_reader.DatasetReader(args)
+pascal_wd_data_loader = DataLoader(pascal_wd_dataset, batch_size=1,
+                         num_workers=0, pin_memory=True, shuffle=True)
 
 
 
-evaluate_segmentation()
+#evaluate_segmentation()
 #evaluate_AP_negative()
-#evaluate_AP_patches()
+evaluate_AP_patches()
