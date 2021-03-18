@@ -57,14 +57,20 @@ class TwoHead(model_utils.DNN):
     x_conf = self.logits_conf(x)
     x = self.logits(x)
 
-    self.aux_out = []
-    self.aux_out_ood = []
+    aux_out = []
+    aux_out_ood = []
     for i in range(len(self.aux_logits)):
-        self.aux_out.append(self.aux_logits[i](aux[i]))
-        self.aux_out_ood.append(self.aux_logits_ood[i](aux[i]))
+        aux_out.append(self.aux_logits[i](aux[i]))
+        aux_out_ood.append(self.aux_logits_ood[i](aux[i]))
 
     self.out = F.upsample(x, target_size, mode='bilinear', align_corners=False)
-    self.out_conf = F.upsample(x_conf, target_size, mode='bilinear', align_corners=False)
+    out_conf = F.upsample(x_conf, target_size, mode='bilinear', align_corners=False)
+
+    return self.out, out_conf, aux_out, aux_out_ood
+
+
+  def predictions(self, x, target_size=None):
+    out, out_conf, _, _ = self.forward(x, target_size)
 
     pred = F.softmax(self.out, dim=1)
     pred_conf = F.softmax(self.out_conf, dim=1)[:,0,:,:]
@@ -77,20 +83,20 @@ class TwoHead(model_utils.DNN):
     labels = batch['labels'].cuda(non_blocking=True)
     labels_ood = batch['labels_ood'].cuda(non_blocking=True)
 
-    self.forward(x)
+    out, out_conf, aux_out_list, aux_out_ood_list = self.forward(x)
 
-    log_softmax = F.log_softmax(self.out, dim=1)
+    log_softmax = F.log_softmax(out, dim=1)
     main_loss = F.nll_loss(log_softmax, labels, ignore_index=self.ignore_id)
 
-    log_softmax_ood = F.log_softmax(self.out_conf, dim=1)
+    log_softmax_ood = F.log_softmax(out_conf, dim=1)
     main_loss_ood = F.nll_loss(log_softmax_ood, labels_ood, ignore_index=2)
 
     aux_loss = []
-    for aux_out in self.aux_out:
+    for aux_out in aux_out_list:
       aux_loss.append(losses.get_aux_loss(aux_out, labels, self.num_classes, average=False))
 
     aux_loss_ood = []
-    for aux_out_ood in self.aux_out_ood:
+    for aux_out_ood in aux_out_ood_list:
       aux_loss_ood.append(losses.get_aux_loss(aux_out_ood, labels_ood, self.num_ood_classes, average=False))
 
     aux_loss = torch.mean(torch.cat(aux_loss, dim=0))

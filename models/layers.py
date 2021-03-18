@@ -33,12 +33,14 @@ class _DenseLayer(nn.Sequential):
     if checkpointing:
       self.func = _DenseLayer._checkpoint_function_factory(self.norm1, self.relu1, self.conv1, self.norm2, self.relu2, self.conv2)
 
-  def forward(self, *x):
+  def forward(self, *x, drop_rate=0):
     if self.checkpointing and self.training:
       out = cp.checkpoint(self.func, *x)
     else:
       x = torch.cat(x, 1)
       out = super(_DenseLayer, self).forward(x)
+    if drop_rate>0:
+      out = F.dropout(out, p=drop_rate, inplace=True)
     return out
 
 
@@ -51,10 +53,10 @@ class _DenseBlock(nn.Sequential):
                           bn_size, dilation, checkpointing=checkpointing)
       self.add_module('denselayer%d' % (i + 1), layer)
 
-  def forward(self, x):
+  def forward(self, x, drop_rate=0):
     x = [x]
     for layer in self.children():
-      x.append(layer(*x))
+      x.append(layer(*x, drop_rate=drop_rate))
     return torch.cat(x, 1)
 
 
@@ -107,11 +109,13 @@ class _BNReluConv(nn.Sequential):
     if checkpointing:
       self.func = _BNReluConv._checkpoint_function_factory(self.norm, self.relu, self.conv)
 
-  def forward (self, x):
+  def forward (self, x, drop_rate=0):
     if self.checkpointing and self.training:
       out = cp.checkpoint(self.func, x)
     else:
       out = super(_BNReluConv, self).forward(x)
+    if drop_rate>0:
+      out = F.dropout(out, p=drop_rate, inplace=True)
     return out
 
 
@@ -130,40 +134,27 @@ class SpatialPyramidPooling(nn.Module):
       self.spp.add_module('spp'+str(i), _BNReluConv(num_features, level_size, k=1))
     self.spp.add_module('spp_fuse', _BNReluConv(final_size, out_size, k=1))
 
-  def forward(self, x):
+  def forward(self, x, drop_rate=0):
     levels = []
     target_size = x.size()[2:4]
 
     ar = target_size[1] / target_size[0]
 
-    x = self.spp[0].forward(x)
+    x = self.spp[0].forward(x, drop_rate=drop_rate)
     levels.append(x)
     num = len(self.spp) - 1
 
-    # grid_size = (grids[0], round(ar*grids[0]))
-    # x = F.adaptive_avg_pool2d(x, grid_size)
-
     for i in range(1, num):
       if not self.square_grid:
-      # grid_size = [grids[i-1], grids[i-1]]
-      # grid_size[smaller] = max(1, round(ar*grids[i-1]))
-      # grid_size = (grids[i-1], grids[i-1])
         grid_size = (self.grids[i-1], max(1, round(ar*self.grids[i-1])))
         x_pooled = F.adaptive_avg_pool2d(x, grid_size)
       else:
         x_pooled = F.adaptive_avg_pool2d(x, self.grids[i-1])
-      level = self.spp[i].forward(x_pooled)
-
-      # print('x =', x.size())
-      # print(grid_size)
-
-      # x = F.avg_pool2d(x, kernel_size=2, stride=2, count_include_pad=False, ceil_mode=True)
-      # level = spp[i].forward(x)
+      level = self.spp[i].forward(x_pooled, drop_rate=drop_rate)
 
       level = F.upsample(level, target_size, mode='bilinear')
       levels.append(level)
 
-    # assert x.size()[2] == 1
     x = torch.cat(levels, 1)
     return self.spp[-1].forward(x)
 
@@ -177,23 +168,24 @@ class _Upsample(nn.Module):
     self.bottleneck = _BNReluConv(skip_maps_in, num_maps_in, k=1)
     self.blend_conv = _BNReluConv(num_maps_in, num_maps_out, k=3)
 
-  def forward(self, x, skip):
+  def forward(self, x, skip, drop_rate=0):
     skip_b = self.bottleneck(skip)
     skip_size = skip_b.size()[2:4]
     x = F.interpolate(x, skip_size, mode='bilinear', align_corners=False)
     x = x + skip_b
     x = self.blend_conv(x)
+    if drop_rate>0:
+      x = F.dropout(x, p=drop_rate, inplace=True)
     return x
 
 
 class DenseNet(nn.Module):
-  def __init__(self, args, growth_rate=32, block_config=(6, 12, 32, 32),
+  def __init__(self, growth_rate=32, block_config=(6, 12, 32, 32),
                num_init_features=64, bn_size=4):
 
     super(DenseNet, self).__init__()
     self.block_config = block_config
     self.growth_rate = growth_rate
-    args.last_block_pooling = 2**5
 
     self.features = nn.Sequential(OrderedDict([
         ('conv0', nn.Conv2d(3, num_init_features, kernel_size=7, stride=2,
@@ -223,18 +215,19 @@ class DenseNet(nn.Module):
 
     self.num_features = num_features
 
-  def forward(self, x, target_size=None):
+  def forward(self, x, target_size=None, drop_rate=0):
     skip_layers = []
     if target_size == None:
       target_size = x.size()[2:4]
-    for i in range(self.first_block_idx+1):
+    for i in range(self.first_block_idx):
       x = self.features[i].forward(x)
 
+    x = self.features[self.first_block_idx].forward(x, drop_rate=drop_rate)
     for i in range(self.first_block_idx+1, self.first_block_idx+6, 2):
       if len(self.features[i]) > 3 and self.features[i][3].stride > 1:
         skip_layers.append(x)
       x = self.features[i].forward(x)
-      x = self.features[i+1].forward(x)
+      x = self.features[i+1].forward(x, drop_rate=drop_rate)
 
     return x, skip_layers
 
@@ -243,7 +236,7 @@ class Ladder(nn.Module):
   def __init__(self, args, num_classes=19):
     super(Ladder, self).__init__()
     self.num_classes = num_classes
-    self.backbone = DenseNet(args)
+    self.backbone = DenseNet()
 
     self.upsample_layers = nn.Sequential()
     spp_square_grid = False
@@ -270,14 +263,14 @@ class Ladder(nn.Module):
 
     self.num_features = num_features
 
-  def forward(self, x, target_size=None):
-    x, skip_layers = self.backbone.forward(x)
+  def forward(self, x, target_size=None, drop_rate=0):
+    x, skip_layers = self.backbone.forward(x, drop_rate=drop_rate)
 
-    x = self.spp(x)
+    x = self.spp(x, drop_rate=drop_rate)
 
     aux = []
     for i, skip in enumerate(reversed(skip_layers)):
       aux.append(x)
-      x = self.upsample_layers[i].forward(x, skip)
+      x = self.upsample_layers[i].forward(x, skip, drop_rate=drop_rate)
 
     return x, aux

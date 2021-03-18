@@ -1,7 +1,22 @@
 import torch
 import numpy as np
 import pdb
+import torch
+import torch.nn.functional as F
 
+
+def odin(img, model, T=1, step=0.0005, num_steps=1, target_size=None):
+    img_odin = img
+    for i in range(num_steps):
+        model(img_odin, target_size)
+        logits = model.out.to('cuda:1')
+        softmax = F.softmax(logits/T, dim=1)
+        softmax_max_T = softmax.max(1)[0]
+        loss_image = torch.mean(-torch.log(softmax_max_T))
+        grad = torch.autograd.grad(loss_image, img_odin)[0]
+        grad_abs = grad.abs().clamp(1e-10)
+        img_odin = img_odin - step * (grad / grad_abs)
+    return img_odin.to('cuda:0')
 
 def get_img_conf_mat(pred, true, size):
     eye_matrix = torch.eye(size[0]).cuda()
@@ -58,8 +73,11 @@ def segment_image(model, batch, args, conf_mats, ood_id=-1, nc=None):
     img = torch.autograd.Variable(batch['image'].cuda(
             non_blocking=True), requires_grad=True)
 
+    if args.odin:
+        img = odin(img, model, T=args.odin_T, step=args.odin_step, target_size=batch['image'].shape[2:])
+
     with torch.no_grad():
-        probs, conf_probs = model(img, batch['image'].shape[2:])
+        probs, conf_probs = model.predictions(img, batch['image'].shape[2:])
         pred = probs.max(dim=1)[1][0]
         pred_w_outlier = pred.clone()
         pred_w_outlier[conf_probs[0] < 0.5] = ood_id

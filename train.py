@@ -29,6 +29,7 @@ def get_args():
     parser.add_argument('--num-workers', type=int, default=1)
     parser.add_argument('--num-epochs', type=int, default=1)
     parser.add_argument('--pretrained', type=int, default=1)
+    parser.add_argument('--odin', type=int, default=0)
     return parser.parse_args()
 
 def prepare_for_saving():

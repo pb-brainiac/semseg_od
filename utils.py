@@ -14,7 +14,6 @@ class Logger(object):
         for f in self.files:
             f.flush()
 
-
 def import_module(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)

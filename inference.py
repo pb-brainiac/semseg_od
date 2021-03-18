@@ -24,6 +24,18 @@ import pdb
 import utils
 import random
 
+def odin(img, model, T=1, step=0.0005, num_steps=1, target_size=None):
+    img_odin = img
+    for i in range(num_steps):
+        model(img_odin, target_size)
+        logits = model.out.to('cuda:1')
+        softmax = F.softmax(logits/T, dim=1)
+        softmax_max_T = softmax.max(1)[0]
+        loss_image = torch.mean(-torch.log(softmax_max_T))
+        grad = torch.autograd.grad(loss_image, img_odin)[0]
+        grad_abs = grad.abs().clamp(1e-10)
+        img_odin = img_odin - step * (grad / grad_abs)
+    return img_odin.to('cuda:0')
 
 def colorize_labels(y, class_colors):
     width = y.shape[1]
@@ -100,7 +112,6 @@ def evaluate_segmentation():
     for step, batch in enumerate(wd_data_loader):
         try:
             pred, pred_w_outlier, conf_probs = evaluation.segment_image(model, batch, args, conf_mats, ood_id, num_classes)
-            print(pred.shape)
             if args.save_outputs:
                 store_outputs(batch, pred, pred_w_outlier, conf_probs)
 
@@ -128,8 +139,10 @@ def evaluate_AP_negative():
     for step, batch in enumerate(wd_data_loader):
         img = torch.autograd.Variable(batch['image'].cuda(
                 non_blocking=True), requires_grad=True)
+        if args.odin:
+            img = odin(img, model, T=args.odin_T, step=args.odin_step, target_size=batch['image'].shape[2:])
         with torch.no_grad():
-            _, conf_probs = model(img, batch['image'].shape[2:])
+            _, conf_probs = model.prediction(img, batch['image'].shape[2:])
             conf_probs = conf_probs.view(-1)
 
         gt_wd = torch.cat((gt_wd,torch.zeros(conf_probs.shape[0], dtype=torch.uint8)))
@@ -148,7 +161,7 @@ def evaluate_AP_negative():
             img = torch.autograd.Variable(batch['image'].cuda(
                     non_blocking=True), requires_grad=True)
             with torch.no_grad():
-                _, conf_probs = model(img, batch['image'].shape[2:])
+                _, conf_probs = model.prediction(img, batch['image'].shape[2:])
                 conf_probs = conf_probs.view(-1)
 
             gt = torch.cat((gt, torch.ones(conf_probs.shape[0], dtype=torch.uint8)))
@@ -180,8 +193,10 @@ def evaluate_AP_patches():
         for step, batch in enumerate(pascal_wd_data_loader):
             img = torch.autograd.Variable(batch['image'].cuda(
                     non_blocking=True), requires_grad=True)
+            if args.odin:
+                img = odin(img, model, T=args.odin_T, step=args.odin_step, target_size=batch['image'].shape[2:])
             with torch.no_grad():
-                _, conf_probs = model(img, batch['image'].shape[2:])
+                _, conf_probs = model.predictions(img, batch['image'].shape[2:])
                 conf_probs = conf_probs.view(-1)
 
             gt = torch.cat((gt, batch['labels'].view(-1)))
@@ -208,6 +223,9 @@ def get_args():
     parser.add_argument('--AP-iters', type=int, default=50)
     parser.add_argument('--save-name', type=str, default='')
     parser.add_argument('--data-path', type=str, default='./data/')
+    parser.add_argument('--odin', type=int, default=0)
+    parser.add_argument('--odin-T', type=float, default=0)
+    parser.add_argument('--odin-step', type=float, default=0)
     return parser.parse_args()
 
 def prepare_for_saving():
@@ -240,7 +258,7 @@ net_model = utils.import_module('net_model', args.model)
 model = net_model.build(args=args)
 state_dict = torch.load(args.params,
                         map_location=lambda storage, loc: storage)
-model.load_state_dict(state_dict, convert=True) 
+model.load_state_dict(state_dict, convert=True)
 model.cuda()
 model = model.eval()
 
@@ -265,6 +283,6 @@ pascal_wd_data_loader = DataLoader(pascal_wd_dataset, batch_size=1,
 
 
 
-#evaluate_segmentation()
+evaluate_segmentation()
 #evaluate_AP_negative()
 evaluate_AP_patches()
